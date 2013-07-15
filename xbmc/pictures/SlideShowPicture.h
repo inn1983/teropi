@@ -28,6 +28,10 @@ typedef uint32_t color_t;
 
 class CBaseTexture;
 
+#ifdef ALLWINNERA10
+#include "cores/VideoRenderers/LinuxRendererA10.h"
+#endif
+
 class CSlideShowPic
 {
 public:
@@ -77,6 +81,7 @@ public:
 
   void Move(float dX, float dY);
   float GetZoom() const { return m_fZoomAmount;};
+  void RenderA10();	//for A10DISP
 
   bool m_bIsComic;
   bool m_bCanMoveHorizontally;
@@ -125,6 +130,7 @@ private:
   bool m_bNoEffect;
   bool m_bFullSize;
   bool m_bTransistionImmediately;
+  cedarv_picture_t m_cedarpic;
 
   CCriticalSection m_textureAccess;
 };

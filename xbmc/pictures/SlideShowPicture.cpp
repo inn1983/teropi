@@ -45,6 +45,10 @@ using namespace std;
 
 static float zoomamount[10] = { 1.0f, 1.2f, 1.5f, 2.0f, 2.8f, 4.0f, 6.0f, 9.0f, 13.5f, 20.0f };
 
+#ifndef A10DISP
+#define A10DISP
+#endif
+
 CSlideShowPic::CSlideShowPic()
 {
   m_pImage = NULL;
@@ -52,6 +56,8 @@ CSlideShowPic::CSlideShowPic()
   m_bIsFinished = false;
   m_bDrawNextImage = false;
   m_bTransistionImmediately = false;
+
+  memset(&m_cedarpic, 0, sizeof(cedarv_picture_t));
 }
 
 CSlideShowPic::~CSlideShowPic()
@@ -197,6 +203,26 @@ void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY
   m_bIsFinished = false;
   m_bDrawNextImage = false;
   m_bIsLoaded = true;
+
+  unsigned char** pixelYUV;
+  pixelYUV = m_pImage->GetPixelYUV();
+  unsigned int iwidth = m_pImage->GetWidth();
+  unsigned int iheight = m_pImage->GetHeight();
+  m_cedarpic.y = *pixelYUV;
+  m_cedarpic.u = *(pixelYUV+1);
+  m_cedarpic.v = *(pixelYUV+2);
+  m_cedarpic.size_y = iwidth * iheight;
+  m_cedarpic.size_u = m_cedarpic.size_y;
+  m_cedarpic.size_v = m_cedarpic.size_y;
+  m_cedarpic.pixel_format = CEDARV_PIXEL_FORMAT_RGB888;
+  m_cedarpic.width = m_pImage->GetWidth();
+  m_cedarpic.height = m_pImage->GetRows();
+  m_cedarpic.display_width = m_cedarpic.width;
+  m_cedarpic.display_height = m_cedarpic.height;
+  m_cedarpic.is_progressive = 1;
+  m_cedarpic.top_field_first = 0;
+  A10VLHide();
+
   return ;
 }
 
@@ -372,7 +398,7 @@ void CSlideShowPic::Process(unsigned int currentTime, CDirtyRegionList &dirtyreg
   if (m_iCounter >= m_transistionEnd.start)
   { // do end transistion
 //    CLog::Log(LOGDEBUG,"Transistioning");
-    m_bDrawNextImage = true;
+    //m_bDrawNextImage = true;	//removed by inn
     if (m_transistionEnd.type == CROSSFADE)
     { // fade out at 1x speed
       alpha = 255 - (color_t)((float)(m_iCounter - m_transistionEnd.start) / (float)m_transistionEnd.length * 255.0f);
@@ -716,7 +742,6 @@ void CSlideShowPic::Move(float fDeltaX, float fDeltaY)
 void CSlideShowPic::Render()
 {
   CSingleLock lock(m_textureAccess);
-
   Render(m_ax, m_ay, m_pImage, (m_alpha << 24) | 0xFFFFFF);
 
   // now render the image in the top right corner if we're zooming
@@ -915,3 +940,23 @@ void CSlideShowPic::Render(float *x, float *y, CBaseTexture* pTexture, color_t c
   g_Windowing.BlitToScreen(m_pImage, NULL, NULL);
 #endif
 }
+
+
+void CSlideShowPic::RenderA10()
+{ 
+	pthread_mutex_lock(&g_dispq_mutex);
+	A10VLQueueItem item;
+	//item.decnr = m_decnr++;
+	item.pict = m_cedarpic;
+	CRect sourceR, destR;
+	sourceR = CRect(0, 0, (unsigned int)m_fWidth, (unsigned int)m_fHeight);
+	destR = sourceR;
+	int curnr;
+
+	curnr = A10VLDisplaySildeShow(m_cedarpic, 1, sourceR, destR);
+	//A10VLDisplayQueueItem(&item, source, dest);
+	pthread_mutex_unlock(&g_dispq_mutex);
+	
+	
+}
+

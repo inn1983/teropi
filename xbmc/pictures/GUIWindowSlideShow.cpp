@@ -115,7 +115,7 @@ void CBackgroundPicLoader::Process()
 
 		if(texture == NULL) 
 		{
-			texture = CTexture::LoadFromFile(m_strFileName, m_maxWidth, m_maxHeight, g_guiSettings.GetBool("pictures.useexifrotation"));
+			texture = CTexture::LoadFromFile(m_strFileName, m_maxWidth, m_maxHeight, g_guiSettings.GetBool("pictures.useexifrotation"), true);
 			m_pTextureMap.insert(std::map<CStdString, CBaseTexture*>::value_type(m_strFileName, texture));
 		}
         totalTime += XbmcThreads::SystemClockMillis() - start;
@@ -166,12 +166,19 @@ CGUIWindowSlideShow::CGUIWindowSlideShow(void)
   m_loadType = KEEP_IN_MEMORY;
   Reset();
   m_bAllPicLoaded = 0;
+  int ret;
+  m_hcedarv = libcedarv_init(&ret);
+  if (ret < 0)
+  {
+    CLog::Log(LOGERROR, "A10: libcedarv_init failed. (%d)\n", ret);
+  }
 }
 
 CGUIWindowSlideShow::~CGUIWindowSlideShow(void)
 {
   Reset();
   delete m_slides;
+  libcedarv_exit(m_hcedarv);
 }
 
 void CGUIWindowSlideShow::AnnouncePlayerPlay(const CFileItemPtr& item)
@@ -627,10 +634,10 @@ void CGUIWindowSlideShow::Process(unsigned int currentTime, CDirtyRegionList &re
 void CGUIWindowSlideShow::Render()
 {
   if (m_Image[m_iCurrentPic].IsLoaded())
-    m_Image[m_iCurrentPic].Render();
+    m_Image[m_iCurrentPic].RenderA10();
 
   if (m_Image[m_iCurrentPic].DrawNextImage() && m_Image[1 - m_iCurrentPic].IsLoaded())
-    m_Image[1 - m_iCurrentPic].Render();
+    m_Image[1 - m_iCurrentPic].RenderA10();
 
   RenderErrorMessage();
   CGUIWindow::Render();
@@ -1197,11 +1204,9 @@ int CBackgroundPicLoader::CacheAllPic(CFileItemList* slides, int maxWidth, int m
 	int i;
 	for (i=0; i<slides->Size(); i++){
 		CStdString strFileName = slides->Get(i)->GetPath();
-		CBaseTexture* texture = CTexture::LoadFromFile(strFileName, maxWidth, maxHeight, g_guiSettings.GetBool("pictures.useexifrotation"));
+		CBaseTexture* texture = CTexture::LoadFromFile(strFileName, maxWidth, maxHeight, g_guiSettings.GetBool("pictures.useexifrotation"), true);
 		m_pTextureMap.insert(std::map<CStdString, CBaseTexture*>::value_type(strFileName, texture));
 	}
 
 	return 1;
 }
-
-

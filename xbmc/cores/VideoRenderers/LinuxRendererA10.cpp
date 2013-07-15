@@ -1421,14 +1421,14 @@ static int             g_syslayer = 0x64;
 static int             g_hlayer = 0;
 static int             g_width;
 static int             g_height;
-static CRect           g_srcRect;
-static CRect           g_dstRect;
+CRect           g_srcRect;
+CRect           g_dstRect;
 static int             g_lastnr;
 static int             g_decnr;
 static int             g_wridx;
 static int             g_rdidx;
 static A10VLQueueItem  g_dispq[DISPQS];
-static pthread_mutex_t g_dispq_mutex;
+pthread_mutex_t g_dispq_mutex;
 
 bool A10VLInit(int &width, int &height, double &refreshRate)
 {
@@ -1860,7 +1860,7 @@ fix blueishness by setting hue and saturation
 of the GL Layer
 http://forum.xbmc.org/showthread.php?tid=126995&page=146 
 */
-    	#define NEUTRAL_HUE 20
+    #define NEUTRAL_HUE 20
 	#define NEUTRAL_SATURATION 32
 
 	args[0] = g_screenid;
@@ -2006,6 +2006,303 @@ http://forum.xbmc.org/showthread.php?tid=126995&page=146
   args[3] = 0;
   return ioctl(g_hdisp, DISP_CMD_VIDEO_GET_FRAME_ID, args);
 }
+
+int A10VLDisplaySildeShow(cedarv_picture_t &picture,
+                        int               refnr,
+                        CRect            &srcRect,
+                        CRect            &dstRect)
+{
+  unsigned long       args[4];
+  __disp_layer_info_t layera;
+  __disp_video_fb_t   frmbuf;
+  __disp_colorkey_t   colorkey;
+
+  memset(&frmbuf, 0, sizeof(__disp_video_fb_t));
+  frmbuf.id              = refnr;
+  frmbuf.interlace       = picture.is_progressive? 0 : 1;
+  frmbuf.top_field_first = picture.top_field_first;
+  //frmbuf.frame_rate      = picture.frame_rate;
+#ifdef CEDARV_FRAME_HAS_PHY_ADDR
+  frmbuf.addr[0]         = (u32)picture.y;
+  frmbuf.addr[1]         = (u32)picture.u;
+#else
+  frmbuf.addr[0]         = mem_get_phy_addr((u32)picture.y);
+  frmbuf.addr[1]         = mem_get_phy_addr((u32)picture.u);
+  frmbuf.addr[2]         = mem_get_phy_addr((u32)picture.v);
+#endif
+
+  if ((g_srcRect != srcRect) || (g_dstRect != dstRect))
+  {
+    args[0] = g_screenid;
+    args[1] = g_hlayer;
+    args[2] = (unsigned long) (&layera);
+    args[3] = 0;
+    ioctl(g_hdisp, DISP_CMD_LAYER_GET_PARA, args);
+    //set video layer attribute
+    layera.mode          = DISP_LAYER_WORK_MODE_SCALER;
+    layera.b_from_screen = 0; //what is this? if enabled all is black
+    layera.pipe          = 1;
+    //use alpha blend
+    layera.alpha_en      = 0;
+    layera.alpha_val     = 0xff;
+    layera.ck_enable     = 0;
+    layera.b_trd_out     = 0;
+    layera.out_trd_mode  = (__disp_3d_out_mode_t)0;
+    //frame buffer pst and size information
+    if (picture.display_height < 720)
+    {
+      layera.fb.cs_mode = DISP_BT601;
+    }
+    else
+    {
+      layera.fb.cs_mode = DISP_BT709;
+    }
+    layera.fb.mode        = DISP_MOD_NON_MB_PLANAR;
+    layera.fb.format      = DISP_FORMAT_RGB888;
+    layera.fb.br_swap     = 0;
+    layera.fb.seq         = DISP_SEQ_P3210;
+    layera.fb.addr[0]     = frmbuf.addr[0];
+    layera.fb.addr[1]     = frmbuf.addr[1];
+	layera.fb.addr[2]     = frmbuf.addr[2];
+    layera.fb.b_trd_src   = 0;
+    layera.fb.trd_mode    = (__disp_3d_src_mode_t)0;
+    layera.fb.size.width  = picture.display_width;
+    layera.fb.size.height = picture.display_height;
+    //source window information
+    layera.src_win.x      = lrint(srcRect.x1);
+    layera.src_win.y      = lrint(srcRect.y1);
+    layera.src_win.width  = lrint(srcRect.x2-srcRect.x1);
+    layera.src_win.height = lrint(srcRect.y2-srcRect.y1);
+    //screen window information
+    layera.scn_win.x      = lrint(dstRect.x1);
+    layera.scn_win.y      = lrint(dstRect.y1);
+    layera.scn_win.width  = lrint(dstRect.x2-dstRect.x1);
+    layera.scn_win.height = lrint(dstRect.y2-dstRect.y1);
+
+    CLog::Log(LOGDEBUG, "A10: srcRect=(%lf,%lf)-(%lf,%lf)\n", srcRect.x1, srcRect.y1, srcRect.x2, srcRect.y2);
+    CLog::Log(LOGDEBUG, "A10: dstRect=(%lf,%lf)-(%lf,%lf)\n", dstRect.x1, dstRect.y1, dstRect.x2, dstRect.y2);
+
+    if (    (layera.scn_win.x < 0)
+         || (layera.scn_win.y < 0)
+         || (layera.scn_win.width  > g_width)
+         || (layera.scn_win.height > g_height)    )
+    {
+      double xzoom, yzoom;
+
+      //TODO: this calculation is against the display fullscreen dimensions,
+      //but should be against the fullscreen area of xbmc
+
+      xzoom = (dstRect.x2 - dstRect.x1) / (srcRect.x2 - srcRect.x1);
+      yzoom = (dstRect.y2 - dstRect.y1) / (srcRect.y2 - srcRect.x1);
+
+      if (layera.scn_win.x < 0)
+      {
+        layera.src_win.x -= layera.scn_win.x / xzoom;
+        layera.scn_win.x = 0;
+      }
+      if (layera.scn_win.width > g_width)
+      {
+        layera.src_win.width -= (layera.scn_win.width - g_width) / xzoom;
+        layera.scn_win.width = g_width;
+      }
+
+      if (layera.scn_win.y < 0)
+      {
+        layera.src_win.y -= layera.scn_win.y / yzoom;
+        layera.scn_win.y = 0;
+      }
+      if (layera.scn_win.height > g_height)
+      {
+        layera.src_win.height -= (layera.scn_win.height - g_height) / yzoom;
+        layera.scn_win.height = g_height;
+      }
+    }
+
+    args[0] = g_screenid;
+    args[1] = g_hlayer;
+    args[2] = (unsigned long)&layera;
+    args[3] = 0;
+    if(ioctl(g_hdisp, DISP_CMD_LAYER_SET_PARA, args))
+      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_SET_PARA failed.\n");
+
+    //open layer
+    args[0] = g_screenid;
+    args[1] = g_hlayer;
+    args[2] = 0;
+    args[3] = 0;
+    if (ioctl(g_hdisp, DISP_CMD_LAYER_OPEN, args))
+      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_OPEN failed.\n");
+
+    //put behind system layer
+    args[0] = g_screenid;
+    args[1] = g_hlayer;
+    args[2] = 0;
+    args[3] = 0;
+    if (ioctl(g_hdisp, DISP_CMD_LAYER_BOTTOM, args))
+      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_BOTTOM failed.\n");
+
+    //turn off colorkey (system layer)
+    args[0] = g_screenid;
+    args[1] = g_syslayer;
+    args[2] = 0;
+    args[3] = 0;
+    if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_OFF, args))
+      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_OFF failed.\n");
+
+
+//2013.3.24 added by inn start
+/* 
+fix blueishness by setting hue and saturation
+of the GL Layer
+http://forum.xbmc.org/showthread.php?tid=126995&page=146 
+*/
+    #define NEUTRAL_HUE 20
+	#define NEUTRAL_SATURATION 32
+
+	args[0] = g_screenid;
+	args[1] = g_hlayer;
+	args[2] = 0;
+	args[3] = 0;
+	int hue=0;
+	hue = ioctl(g_hdisp, DISP_CMD_LAYER_GET_HUE, args);
+	// CLog::Log(LOGDEBUG, "A10: layer hue is %d.\n", hue );
+
+	// setting hue and saturation for this layer
+	// to prevent blue tainted screen
+	if ( hue != NEUTRAL_HUE )
+	{
+		args[0] = g_screenid;
+		args[1] = g_hlayer;
+		args[2] = NEUTRAL_HUE;
+		args[3] = 0;
+		if ( ioctl(g_hdisp, DISP_CMD_LAYER_SET_HUE, args) < 0 )
+		{
+			CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_SET_HUE failed.\n");
+		}
+		else
+		{
+			CLog::Log(LOGDEBUG, "A10: set hue to : %d\n", NEUTRAL_HUE);
+		}
+	}
+
+	args[0] = g_screenid;
+	args[1] = g_hlayer;
+	args[2] = 0;
+	args[3] = 0;
+	int sat = 0;
+	sat = ioctl(g_hdisp, DISP_CMD_LAYER_GET_SATURATION, args);
+	// CLog::Log(LOGDEBUG, "A10: layer saturation is %d.\n", sat );
+
+	if ( sat != NEUTRAL_SATURATION )
+	{
+		args[0] = g_screenid;
+		args[1] = g_hlayer;
+		args[2] = NEUTRAL_SATURATION;
+		args[3] = 0;
+		if ( ioctl(g_hdisp, DISP_CMD_LAYER_SET_SATURATION, args) < 0 )
+		{
+			CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_SET_SATURATION failed.\n");
+		}
+		else
+		{
+			CLog::Log(LOGDEBUG, "A10: set saturation to : %d\n", NEUTRAL_SATURATION);
+		}
+	}
+//2013.3.24 added by inn end 
+
+    if ((g_height > 720) && (getenv("A10AB") == NULL))
+    {
+      //no tearing at the cost off alpha blending...
+
+      //set colorkey
+      colorkey.ck_min.alpha = 0;
+      colorkey.ck_min.red   = 1;
+      colorkey.ck_min.green = 2;
+      colorkey.ck_min.blue  = 3;
+      colorkey.ck_max = colorkey.ck_min;
+      colorkey.ck_max.alpha = 255;
+      colorkey.red_match_rule   = 2;
+      colorkey.green_match_rule = 2;
+      colorkey.blue_match_rule  = 2;
+
+      args[0] = g_screenid;
+      args[1] = (unsigned long)&colorkey;
+      args[2] = 0;
+      args[3] = 0;
+      if (ioctl(g_hdisp, DISP_CMD_SET_COLORKEY, args))
+        CLog::Log(LOGERROR, "A10: DISP_CMD_SET_COLORKEY failed.\n");
+
+      //turn on colorkey
+      args[0] = g_screenid;
+      args[1] = g_hlayer;
+      args[2] = 0;
+      args[3] = 0;
+      if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_ON, args))
+        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_ON failed.\n");
+
+      //turn on global alpha (system layer)
+      args[0] = g_screenid;
+      args[1] = g_syslayer;
+      args[2] = 0;
+      args[3] = 0;
+      if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_ON, args))
+        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_ON failed.\n");
+    }
+    else
+    {
+      //turn off global alpha (system layer)
+      args[0] = g_screenid;
+      args[1] = g_syslayer;
+      args[2] = 0;
+      args[3] = 0;
+      if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_OFF, args))
+        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_OFF failed.\n");
+    }
+
+    //enable vpp
+    args[0] = g_screenid;
+    args[1] = g_hlayer;
+    args[2] = 0;
+    args[3] = 0;
+    if (ioctl(g_hdisp, DISP_CMD_LAYER_VPP_ON, args))
+      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_VPP_ON failed.\n");
+
+    //enable enhance
+    args[0] = g_screenid;
+    args[1] = g_hlayer;
+    args[2] = 0;
+    args[3] = 0;
+    if (ioctl(g_hdisp, DISP_CMD_LAYER_ENHANCE_ON, args))
+      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ENHANCE_ON failed.\n");
+
+    //start video
+    args[0] = g_screenid;
+    args[1] = g_hlayer;
+    args[2] = 0;
+    args[3] = 0;
+    if (ioctl(g_hdisp, DISP_CMD_VIDEO_START, args))
+      CLog::Log(LOGERROR, "A10: DISP_CMD_VIDEO_START failed.\n");
+
+    g_srcRect = srcRect;
+    g_dstRect = dstRect;
+  }
+
+  args[0] = g_screenid;
+  args[1] = g_hlayer;
+  args[2] = (unsigned long)&frmbuf;
+  args[3] = 0;
+  if (ioctl(g_hdisp, DISP_CMD_VIDEO_SET_FB, args))
+    CLog::Log(LOGERROR, "A10: DISP_CMD_VIDEO_SET_FB failed.\n");
+
+  //CLog::Log(LOGDEBUG, "A10: render %d\n", buffer->picture.id);
+
+  args[0] = g_screenid;
+  args[1] = g_hlayer;
+  args[2] = 0;
+  args[3] = 0;
+  return ioctl(g_hdisp, DISP_CMD_VIDEO_GET_FRAME_ID, args);
+}
+
 
 #endif
 

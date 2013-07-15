@@ -56,7 +56,7 @@ public:
    \return a CBaseTexture pointer to the created texture - NULL if the texture failed to load.
    */
   static CBaseTexture *LoadFromFile(const CStdString& texturePath, unsigned int idealWidth = 0, unsigned int idealHeight = 0,
-                                    bool autoRotate = false);
+                                    bool autoRotate = false, bool bYuv = false);
 
   /*! \brief Load a texture from a file in memory
    Loads a texture from a file in memory, restricting in size if needed based on maxHeight and maxWidth.
@@ -101,6 +101,7 @@ public:
 
   static unsigned int PadPow2(unsigned int x);
   bool SwapBlueRed(unsigned char *pixels, unsigned int height, unsigned int pitch, unsigned int elements = 4, unsigned int offset=0);
+  unsigned char** GetPixelYUV();	//for  A10DISP YUV
 
 private:
   // no copy constructor
@@ -110,6 +111,7 @@ protected:
   bool LoadFromFileInMem(unsigned char* buffer, size_t size, const std::string& mimeType,
                          unsigned int maxWidth, unsigned int maxHeight);
   bool LoadFromFileInternal(const CStdString& texturePath, unsigned int maxWidth, unsigned int maxHeight, bool autoRotate);
+  bool LoadFromFileInternalYUV(const CStdString& texturePath, unsigned int maxWidth, unsigned int maxHeight, bool autoRotate);
   void LoadFromImage(ImageInfo &image, bool autoRotate = false);
   // helpers for computation of texture parameters for compressed textures
   unsigned int GetPitch(unsigned int width) const;
@@ -124,6 +126,10 @@ protected:
   unsigned int m_originalHeight;  ///< original image height before scaling or cropping
 
   unsigned char* m_pixels;
+  unsigned char* m_pixelsY;		//for  A10DISP YUV
+  unsigned char* m_pixelsU;		//for  A10DISP YUV
+  unsigned char* m_pixelsV;		//for  A10DISP YUV
+  unsigned char* m_pixelsYUV[2];	//for  A10DISP YUV
   bool m_loadedToGPU;
   unsigned int m_format;
   int m_orientation;

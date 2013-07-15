@@ -301,5 +301,12 @@ void A10VLFreeQueue();
 void A10VLDisplayQueueItem(A10VLQueueItem *pItem, CRect &srcRect, CRect &dstRect);
 
 int  A10VLDisplayPicture(cedarv_picture_t &pict, int refnr, CRect &srcRect, CRect &dstRect);
+int A10VLDisplaySildeShow(cedarv_picture_t &pict, int refnr, CRect &srcRect, CRect &dstRect);
+
+
+extern CRect  g_srcRect;
+extern CRect g_dstRect;
+extern pthread_mutex_t g_dispq_mutex;
+
 
 #endif

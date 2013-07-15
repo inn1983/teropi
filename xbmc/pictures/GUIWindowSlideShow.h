@@ -29,6 +29,14 @@
 #include "DllImageLib.h"
 #include "utils/SortUtils.h"
 
+extern "C" {
+#include <libcedarv.h>
+#include <drv_display_sun4i.h>
+#ifndef CEDARV_FRAME_HAS_PHY_ADDR
+#include <os_adapter.h>
+#endif
+}
+
 class CFileItemList;
 class CVariant;
 
@@ -153,4 +161,5 @@ private:
   CStdString m_strExtensions;
   CPoint m_firstGesturePoint;
   int m_bAllPicLoaded;	//added by inn. all of jpegs are decoded.
+  cedarv_decoder_t* m_hcedarv;	//for A10 DISP
 };
