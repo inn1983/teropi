@@ -32,6 +32,10 @@
 #endif
 #include <math.h>
 
+#ifdef ALLWINNERA10
+#include "cores/VideoRenderers/LinuxRendererA10.h"
+#endif
+
 using namespace std;
 
 #define IMMEDIATE_TRANSISTION_TIME          20
@@ -56,8 +60,9 @@ CSlideShowPic::CSlideShowPic()
   m_bIsFinished = false;
   m_bDrawNextImage = false;
   m_bTransistionImmediately = false;
+  m_bImageUpdate = false;
 
-  memset(&m_cedarpic, 0, sizeof(cedarv_picture_t));
+  //memset(&m_cedarpic, 0, sizeof(cedarv_picture_t));
 }
 
 CSlideShowPic::~CSlideShowPic()
@@ -97,7 +102,7 @@ void CSlideShowPic::CloseNoDel()
 void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect, TRANSISTION_EFFECT transEffect)
 {
   CSingleLock lock(m_textureAccess);
-  CloseNoDel();	
+  Close();	
   m_bPause = false;
   m_bNoEffect = false;
   m_bTransistionImmediately = false;
@@ -203,26 +208,7 @@ void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY
   m_bIsFinished = false;
   m_bDrawNextImage = false;
   m_bIsLoaded = true;
-
-  unsigned char** pixelYUV;
-  pixelYUV = m_pImage->GetPixelYUV();
-  unsigned int iwidth = m_pImage->GetWidth();
-  unsigned int iheight = m_pImage->GetHeight();
-  m_cedarpic.y = *pixelYUV;
-  m_cedarpic.u = *(pixelYUV+1);
-  m_cedarpic.v = *(pixelYUV+2);
-  m_cedarpic.size_y = iwidth * iheight;
-  m_cedarpic.size_u = m_cedarpic.size_y;
-  m_cedarpic.size_v = m_cedarpic.size_y;
-  m_cedarpic.pixel_format = CEDARV_PIXEL_FORMAT_RGB888;
-  m_cedarpic.width = m_pImage->GetWidth();
-  m_cedarpic.height = m_pImage->GetRows();
-  m_cedarpic.display_width = m_cedarpic.width;
-  m_cedarpic.display_height = m_cedarpic.height;
-  m_cedarpic.is_progressive = 1;
-  m_cedarpic.top_field_first = 0;
-  A10VLHide();
-
+  m_bImageUpdate = true;
   return ;
 }
 
@@ -944,7 +930,8 @@ void CSlideShowPic::Render(float *x, float *y, CBaseTexture* pTexture, color_t c
 
 void CSlideShowPic::RenderA10()
 { 
-	pthread_mutex_lock(&g_dispq_mutex);
+	//pthread_mutex_lock(&g_dispq_mutex);
+	/*
 	A10VLQueueItem item;
 	//item.decnr = m_decnr++;
 	item.pict = m_cedarpic;
@@ -955,8 +942,19 @@ void CSlideShowPic::RenderA10()
 
 	curnr = A10VLDisplaySildeShow(m_cedarpic, 1, sourceR, destR);
 	//A10VLDisplayQueueItem(&item, source, dest);
-	pthread_mutex_unlock(&g_dispq_mutex);
+	*/
+	glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glClearColor(1.0/255, 2.0/255, 3.0/255, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(0, 0, 0, 0);
+	A10disp_set_para(m_pImage->GetPixelYphys(), m_pImage->GetPixelUVphys(), 
+					 m_pImage->GetColor(), m_pImage->GetWidth(), m_pImage->GetHeight(),
+					 0, 0, (unsigned int)1920, (unsigned int)1080, m_bImageUpdate);
+					 //0, 0, (unsigned int)m_fWidth, (unsigned int)m_fHeight, m_bImageUpdate);
+	m_bImageUpdate = false;
 	
+	//pthread_mutex_unlock(&g_dispq_mutex);
 	
 }
 

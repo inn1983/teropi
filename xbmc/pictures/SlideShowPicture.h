@@ -28,10 +28,6 @@ typedef uint32_t color_t;
 
 class CBaseTexture;
 
-#ifdef ALLWINNERA10
-#include "cores/VideoRenderers/LinuxRendererA10.h"
-#endif
-
 class CSlideShowPic
 {
 public:
@@ -130,7 +126,8 @@ private:
   bool m_bNoEffect;
   bool m_bFullSize;
   bool m_bTransistionImmediately;
-  cedarv_picture_t m_cedarpic;
+  bool m_bImageUpdate;
+  //cedarv_picture_t m_cedarpic;
 
   CCriticalSection m_textureAccess;
 };

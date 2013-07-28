@@ -62,7 +62,7 @@ CBaseTexture::CBaseTexture(unsigned int width, unsigned int height, unsigned int
   m_pixelsY = NULL;
   m_pixelsU = NULL;
   m_pixelsV = NULL;
-  //m_pixelsYUV = NULL;
+  m_pixelsUV = NULL;
   m_loadedToGPU = false;
   Allocate(width, height, format);
 }
@@ -72,7 +72,8 @@ CBaseTexture::~CBaseTexture()
   delete[] m_pixels;
 }
 
-void CBaseTexture::Allocate(unsigned int width, unsigned int height, unsigned int format)
+//Allocate() will be callde in the Constructor of base class !!
+void CBaseTexture::Allocate(unsigned int width, unsigned int height, unsigned int format)	
 {
   m_imageWidth = m_originalWidth = width;
   m_imageHeight = m_originalHeight = height;
@@ -117,6 +118,7 @@ void CBaseTexture::Allocate(unsigned int width, unsigned int height, unsigned in
   m_pixels = new unsigned char[GetPitch() * GetRows()];
   //delete[] m_pixelsY;
   //m_pixelsY = new unsigned char[GetPitch() * GetRows()];
+  /*
   av_heap_free(m_pixelsY);
   m_pixelsY = (unsigned char*)av_heap_alloc(GetPitch() * GetRows());
   av_heap_free(m_pixelsU);
@@ -126,6 +128,7 @@ void CBaseTexture::Allocate(unsigned int width, unsigned int height, unsigned in
   m_pixelsYUV[0] = m_pixelsY;
   m_pixelsYUV[1] = m_pixelsU;
   m_pixelsYUV[2] = m_pixelsV;
+  */
 }
 
 void CBaseTexture::Update(unsigned int width, unsigned int height, unsigned int pitch, unsigned int format, const unsigned char *pixels, bool loadToGPU)
@@ -197,7 +200,7 @@ void CBaseTexture::ClampToEdge()
   }
 }
 
-CBaseTexture *CBaseTexture::LoadFromFile(const CStdString& texturePath, unsigned int idealWidth, unsigned int idealHeight, bool autoRotate, bool bYuv /*=flase*/)
+CBaseTexture *CBaseTexture::LoadFromFile(const CStdString& texturePath, unsigned int idealWidth, unsigned int idealHeight, bool autoRotate, bool bA10disp /*=flase*/)
 {
 #if defined(TARGET_ANDROID)
   CURL url(texturePath);
@@ -224,15 +227,17 @@ CBaseTexture *CBaseTexture::LoadFromFile(const CStdString& texturePath, unsigned
     }
   }
 #endif
-  CTexture *texture = new CTexture();
-  if (!bYuv){
-  	if (texture->LoadFromFileInternal(texturePath, idealWidth, idealHeight, autoRotate))
-		return texture;
+  CBaseTexture *texture;
+  if (!bA10disp){
+	texture = new CTexture();
   }
   else{
-	if (texture->LoadFromFileInternalYUV(texturePath, idealWidth, idealHeight, autoRotate))
-		return texture;
+	texture = new CA10Texture();
   }
+
+  if (texture->LoadFromFileInternal(texturePath, idealWidth, idealHeight, autoRotate))
+	return texture;
+
    delete texture;
    return NULL;
 }
@@ -625,12 +630,5 @@ bool CBaseTexture::HasAlpha() const
 {
   return m_hasAlpha;
 }
-
-//for  A10DISP YUV
-unsigned char** CBaseTexture::GetPixelYUV()
-{
-	return m_pixelsYUV;
-
-}	  
 
 
