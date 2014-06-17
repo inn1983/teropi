@@ -60,7 +60,7 @@ CSlideShowPic::CSlideShowPic()
   m_bIsFinished = false;
   m_bDrawNextImage = false;
   m_bTransistionImmediately = false;
-  m_bImageUpdate = false;
+  m_ImageUpdateCmd = 0x0;
 
   //memset(&m_cedarpic, 0, sizeof(cedarv_picture_t));
 }
@@ -99,7 +99,7 @@ void CSlideShowPic::CloseNoDel()
   m_bIsDirty = true;
 }
 
-void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect, TRANSISTION_EFFECT transEffect)
+void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect, TRANSISTION_EFFECT transEffect, int zoomWidth, int zoomHight)
 {
   CSingleLock lock(m_textureAccess);
   Close();	
@@ -208,7 +208,9 @@ void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY
   m_bIsFinished = false;
   m_bDrawNextImage = false;
   m_bIsLoaded = true;
-  m_bImageUpdate = true;
+  m_ImageUpdateCmd |= 0x1;	//bit1:display init
+  m_zoomHight = zoomHight;
+  m_zoomWidth = zoomWidth;
   return ;
 }
 
@@ -403,6 +405,8 @@ void CSlideShowPic::Process(unsigned int currentTime, CDirtyRegionList &dirtyreg
   {
     m_alpha = alpha;
     m_bIsDirty = true;
+	//m_bImageUpdate = true;
+	m_ImageUpdateCmd |= 0x2;	//bit2:set alpha
   }
   if (m_displayEffect != EFFECT_NO_TIMEOUT || m_iCounter < m_transistionStart.length || m_iCounter >= m_transistionEnd.start || (m_iCounter >= m_transistionTemp.start && m_iCounter < m_transistionTemp.start + m_transistionTemp.length))
   {
@@ -931,18 +935,7 @@ void CSlideShowPic::Render(float *x, float *y, CBaseTexture* pTexture, color_t c
 void CSlideShowPic::RenderA10()
 { 
 	//pthread_mutex_lock(&g_dispq_mutex);
-	/*
-	A10VLQueueItem item;
-	//item.decnr = m_decnr++;
-	item.pict = m_cedarpic;
-	CRect sourceR, destR;
-	sourceR = CRect(0, 0, (unsigned int)m_fWidth, (unsigned int)m_fHeight);
-	destR = sourceR;
-	int curnr;
 
-	curnr = A10VLDisplaySildeShow(m_cedarpic, 1, sourceR, destR);
-	//A10VLDisplayQueueItem(&item, source, dest);
-	*/
 	glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(1.0/255, 2.0/255, 3.0/255, 0);
@@ -950,9 +943,8 @@ void CSlideShowPic::RenderA10()
     glClearColor(0, 0, 0, 0);
 	A10disp_set_para(m_pImage->GetPixelYphys(), m_pImage->GetPixelUVphys(), 
 					 m_pImage->GetColor(), m_pImage->GetWidth(), m_pImage->GetHeight(),
-					 0, 0, (unsigned int)1920, (unsigned int)1080, m_bImageUpdate);
-					 //0, 0, (unsigned int)m_fWidth, (unsigned int)m_fHeight, m_bImageUpdate);
-	m_bImageUpdate = false;
+					 0, 0, m_zoomWidth, m_zoomHight, (uint16_t)m_alpha, m_ImageUpdateCmd);
+	m_ImageUpdateCmd = 0x0;
 	
 	//pthread_mutex_unlock(&g_dispq_mutex);
 	

@@ -307,7 +307,7 @@ int A10GetLayer();
 
 int A10disp_set_para(const uint32_t luma_buffer, const uint32_t chroma_buffer,
 			const int color_format, const int width, const int height,
-			const int out_x, const int out_y, const int out_width, const int out_height, bool bUpdate);
+			const int out_x, const int out_y, const int out_width, const int out_height, const uint16_t alpha, uint32_t UpdateCmd);
 
 extern CRect  g_srcRect;
 extern CRect g_dstRect;

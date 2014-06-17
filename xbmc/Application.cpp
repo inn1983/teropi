@@ -2287,7 +2287,7 @@ void CApplication::Render()
       CSingleLock lock(m_frameMutex);
 
       TightConditionVariable<int&> cv(m_frameCond,m_frameCount);
-      cv.wait(lock,100);
+      cv.wait(lock,5);
 
       m_bPresentFrame = m_frameCount > 0;
       decrement = m_bPresentFrame;

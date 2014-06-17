@@ -44,7 +44,7 @@ public:
   CSlideShowPic();
   ~CSlideShowPic();
 
-  void SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect = EFFECT_RANDOM, TRANSISTION_EFFECT transEffect = FADEIN_FADEOUT);
+  void SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect = EFFECT_RANDOM, TRANSISTION_EFFECT transEffect = FADEIN_FADEOUT, int zoomWidth=1920, int zoomHight=1080);
   void UpdateTexture(CBaseTexture* pTexture);
 
   bool IsLoaded() const { return m_bIsLoaded;};
@@ -126,7 +126,9 @@ private:
   bool m_bNoEffect;
   bool m_bFullSize;
   bool m_bTransistionImmediately;
-  bool m_bImageUpdate;
+  uint32_t m_ImageUpdateCmd;
+  int m_zoomWidth;
+  int m_zoomHight;
   //cedarv_picture_t m_cedarpic;
 
   CCriticalSection m_textureAccess;

@@ -104,7 +104,7 @@ void CGUITextLayout::RenderScrolling(float x, float y, float angle, color_t colo
 {
   if (!m_font)
     return;
-
+/*
   float scrollAmount = fabs(scrollInfo.GetPixelsPerFrame() * g_graphicsContext.GetGUIScaleX());	//added by inn
   m_font->SetScrollAmount(scrollAmount);	//added by inn
 
@@ -113,8 +113,8 @@ void CGUITextLayout::RenderScrolling(float x, float y, float angle, color_t colo
 	m_font->TelopEnd();
 	return;
   }
-
   m_bTelop = true;	//added by inn
+*/
   // set the main text color
   if (m_colors.size())
     m_colors[0] = color;
@@ -567,13 +567,13 @@ void CGUITextLayout::CalcTextExtent()
   m_textWidth = 0;
   m_textHeight = 0;
   if (!m_font) return;
-
+/*
   if (m_font->GetHasRenderF() && m_bTelop){	//added by inn
 	//m_font->Begin();
 	//m_font->End();
 	return;
   }
-
+*/
   for (vector<CGUIString>::iterator i = m_lines.begin(); i != m_lines.end(); i++)
   {
     const CGUIString &string = *i;

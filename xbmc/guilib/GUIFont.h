@@ -92,7 +92,7 @@ public:
   float initialPos;
   CStdStringW suffix;
 
-  static const int defaultSpeed = 60;
+  static const int defaultSpeed = 33;
 private:
   float m_averageFrameTime;
   uint32_t m_lastFrameTime;

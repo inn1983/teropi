@@ -276,7 +276,8 @@ const infomap system_labels[] =  {{ "hasnetwork",       SYSTEM_ETHERNET_LINK_ACT
                                   { "alarmpos",         SYSTEM_ALARM_POS },
                                   { "isinhibit",        SYSTEM_ISINHIBIT },
                                   { "hasshutdown",      SYSTEM_HAS_SHUTDOWN },
-                                  { "haspvr",           SYSTEM_HAS_PVR }};
+                                  { "haspvr",           SYSTEM_HAS_PVR },
+								  { "twitter",          SYSTEM_TWITTER }};
 
 const infomap system_param[] =   {{ "hasalarm",         SYSTEM_HAS_ALARM },
                                   { "hascoreid",        SYSTEM_HAS_CORE_ID },
@@ -1718,6 +1719,11 @@ CStdString CGUIInfoManager::GetLabel(int info, int contextWindow, CStdString *fa
         strLabel = friendlyName;
     }
     break;
+  case SYSTEM_TWITTER:
+ 	{
+		strLabel = m_TwitterText;
+    }
+  	break;
   case LCD_PLAY_ICON:
     {
       int iPlaySpeed = g_application.GetPlaySpeed();
@@ -5411,3 +5417,10 @@ bool CGUIInfoManager::GetEpgInfoTag(CEpgInfoTag& tag) const
   }
   return false;
 }
+
+
+void CGUIInfoManager::SetTwitterInfo(CStdString str)
+{
+	m_TwitterText = str;
+}
+

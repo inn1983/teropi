@@ -417,7 +417,7 @@ void CGUIFontTTFBase::DrawTextInternal(float x, float y, const vecColors &colors
     else
       cursorX += ch->advance;
   }
-  m_ChHasRended = true;	//added by inn
+  //m_ChHasRended = true;	//added by inn
   
   End();
 }

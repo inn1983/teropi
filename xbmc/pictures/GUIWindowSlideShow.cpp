@@ -171,6 +171,8 @@ CGUIWindowSlideShow::CGUIWindowSlideShow(void)
   m_loadType = KEEP_IN_MEMORY;
   Reset();
   m_bAllPicLoaded = 0;
+  m_zoomHight = 1080;
+  m_zoomWidth = 1920;
   int ret;
   //m_hcedarv = libcedarv_init(&ret);
   if (ret < 0)
@@ -852,7 +854,7 @@ bool CGUIWindowSlideShow::OnAction(const CAction &action)
   case ACTION_ANALOG_MOVE:
     Move(action.GetAmount()*PICTURE_MOVE_AMOUNT_ANALOG, -action.GetAmount(1)*PICTURE_MOVE_AMOUNT_ANALOG);
     break;
-
+	
   default:
     return CGUIWindow::OnAction(action);
   }
@@ -948,6 +950,27 @@ bool CGUIWindowSlideShow::OnMessage(CGUIMessage& message)
         }
       }
       break;
+	case GUI_MSG_SETTING_SLIDSHOWSIZE:
+	  {
+	  	CStdString setsize = message.GetStringParam();
+		if (setsize.Equals("size0"))
+		{
+			m_zoomHight = 1080;
+			m_zoomWidth = 1920;
+		}
+		else if (setsize.Equals("size1"))
+		{
+			m_zoomHight = 844;
+			m_zoomWidth = 1500;
+		}
+		else if (setsize.Equals("size2"))
+		{
+			m_zoomHight = 720;
+			m_zoomWidth = 1280;
+		}
+
+	  }
+	 break;
   }
   return CGUIWindow::OnMessage(message);
 }
@@ -1067,7 +1090,8 @@ void CGUIWindowSlideShow::OnLoadPic(int iPic, int iSlideNumber, CBaseTexture* pT
     {
       if (m_bSlideShow)
 	  	//modfied by inn.  Set the TRANSISTION_EFFECT.
-        m_Image[iPic].SetTexture(iSlideNumber, pTexture, g_guiSettings.GetBool("slideshow.displayeffects") ? CSlideShowPic::EFFECT_RANDOM : CSlideShowPic::EFFECT_NONE, CSlideShowPic::TRANSISTION_NONE);
+        m_Image[iPic].SetTexture(iSlideNumber, pTexture, g_guiSettings.GetBool("slideshow.displayeffects") ? CSlideShowPic::EFFECT_RANDOM : CSlideShowPic::EFFECT_NONE, 
+        						CSlideShowPic::FADEIN_FADEOUT, m_zoomWidth, m_zoomHight);
       else
         m_Image[iPic].SetTexture(iSlideNumber, pTexture, CSlideShowPic::EFFECT_NO_TIMEOUT);
       m_Image[iPic].SetOriginalSize(pTexture->GetOriginalWidth(), pTexture->GetOriginalHeight(), bFullSize);

@@ -163,5 +163,7 @@ private:
   CStdString m_strExtensions;
   CPoint m_firstGesturePoint;
   int m_bAllPicLoaded;	//added by inn. all of jpegs are decoded.
+  int m_zoomHight;
+  int m_zoomWidth;
   //cedarv_decoder_t* m_hcedarv;	//for A10 DISP
 };

@@ -420,7 +420,7 @@ void CLinuxRendererA10::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
   ManageTextures();
 
   g_graphicsContext.BeginPaint();
-
+/*		//removed by inn. let the fps is not same to the video.
   if( !m_eventTexturesDone[index]->WaitMSec(500))
   {
     CLog::Log(LOGWARNING, "%s - Timeout waiting for texture %d", __FUNCTION__, index);
@@ -432,8 +432,8 @@ void CLinuxRendererA10::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
       index = m_iYV12RenderBuffer;
     }
   }
-  else
-    m_iLastRenderBuffer = index;
+  else	*/
+  m_iLastRenderBuffer = index;
 
   if (clear)
   {
@@ -1243,7 +1243,7 @@ bool CLinuxRendererA10::CreateYV12Texture(int index)
 //********************************************************************************************************
 void CLinuxRendererA10::UploadBYPASSTexture(int index)
 {
-  m_eventTexturesDone[index]->Set();
+  //m_eventTexturesDone[index]->Set();		//by inn. let the fps is not same to the video.
 }
 
 void CLinuxRendererA10::DeleteBYPASSTexture(int index)
@@ -2340,7 +2340,7 @@ int A10GetLayer()
 
 int A10disp_set_para(const uint32_t luma_buffer, const uint32_t chroma_buffer,
 			const int color_format, const int width, const int height,
-			const int out_x, const int out_y, const int out_width, const int out_height, bool bUpdate)
+			const int out_x, const int out_y, const int out_width, const int out_height, const uint16_t alpha, uint32_t UpdateCmd)
 {
 	uint32_t args[4];
 	__disp_layer_info_t layer_info;
@@ -2352,138 +2352,128 @@ int A10disp_set_para(const uint32_t luma_buffer, const uint32_t chroma_buffer,
 
 	frmbuf.addr[0]         = luma_buffer + DRAM_OFFSET;
   	frmbuf.addr[1]         = chroma_buffer + DRAM_OFFSET;
+	layer_info.alpha_val     = 0xff;
 	
-    if (bUpdate)
+    if (UpdateCmd & 0x01)
 	{
-	memset(&layer_info, 0, sizeof(layer_info));
-	layer_info.pipe = 1;
-	layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
-	layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
-	switch (color_format)
-	{
-	case COLOR_YUV420:
-		layer_info.fb.format = DISP_FORMAT_YUV420;
-		break;
-	case COLOR_YUV422:
-		layer_info.fb.format = DISP_FORMAT_YUV422;
-		break;
-	default:
-		return 0;
-		break;
+		memset(&layer_info, 0, sizeof(layer_info));
+		layer_info.pipe = 1;
+		layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
+		layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
+
+		//use alpha blend
+	    layer_info.alpha_en      = 1;
+	    layer_info.alpha_val     = alpha;
+	    layer_info.ck_enable     = 0;
+	    layer_info.b_trd_out     = 0;
+	    layer_info.out_trd_mode  = (__disp_3d_out_mode_t)0;
+		
+		switch (color_format)
+		{
+		case COLOR_YUV420:
+			layer_info.fb.format = DISP_FORMAT_YUV420;
+			break;
+		case COLOR_YUV422:
+			layer_info.fb.format = DISP_FORMAT_YUV422;
+			break;
+		default:
+			return 0;
+			break;
+		}
+		layer_info.fb.seq = DISP_SEQ_UVUV;
+		layer_info.fb.br_swap = 0;
+		layer_info.fb.addr[0] = luma_buffer + DRAM_OFFSET;
+		layer_info.fb.addr[1] = chroma_buffer + DRAM_OFFSET;
+
+		layer_info.fb.cs_mode = DISP_BT601;
+		layer_info.fb.size.width = width;
+		layer_info.fb.size.height = height;
+		layer_info.src_win.x = 0;
+		layer_info.src_win.y = 0;
+		layer_info.src_win.width = width;
+		layer_info.src_win.height = height;
+		layer_info.scn_win.x = out_x;
+		layer_info.scn_win.y = out_y;
+		layer_info.scn_win.width = out_width;
+		layer_info.scn_win.height = out_height;
+
+		args[0] = 0;
+		args[1] = g_hlayer;
+		args[2] = (unsigned long)(&layer_info);
+		args[3] = 0;
+		ioctl(g_hdisp, DISP_CMD_LAYER_SET_PARA, args);
+		ioctl(g_hdisp, DISP_CMD_LAYER_BOTTOM, args);
+		ioctl(g_hdisp, DISP_CMD_LAYER_OPEN, args);
+
+	    //turn off colorkey (system layer)
+	    args[0] = 0;
+	    args[1] = g_syslayer;
+	    args[2] = 0;
+	    args[3] = 0;
+	    if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_OFF, args))
+	      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_OFF failed.\n");
+	    //if ((g_height > 720) && (getenv("A10AB") == NULL))
+	    //{
+	      //no tearing at the cost off alpha blending...
+
+	      //set colorkey
+		colorkey.ck_min.alpha = 0;
+		colorkey.ck_min.red   = 1;
+		colorkey.ck_min.green = 2;
+		colorkey.ck_min.blue  = 3;
+		colorkey.ck_max = colorkey.ck_min;
+		colorkey.ck_max.alpha = 255;
+		//colorkey.ck_max.red   = 10;
+		//colorkey.ck_max.green = 10;
+		//colorkey.ck_max.blue  = 10;
+		colorkey.red_match_rule   = 2;
+		colorkey.green_match_rule = 2;
+		colorkey.blue_match_rule  = 2;
+
+		args[0] = 0;
+		args[1] = (unsigned long)&colorkey;
+		args[2] = 0;
+		args[3] = 0;
+		if (ioctl(g_hdisp, DISP_CMD_SET_COLORKEY, args))
+		  CLog::Log(LOGERROR, "A10: DISP_CMD_SET_COLORKEY failed.\n");
+
+		//turn on colorkey
+		args[0] = 0;
+		args[1] = g_hlayer;
+		args[2] = 0;
+		args[3] = 0;
+		if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_ON, args))
+		  CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_ON failed.\n");
+
+		//turn on global alpha (system layer)
+		args[0] = g_screenid;
+		args[1] = g_syslayer;
+		args[2] = 0;
+		args[3] = 0;
+		if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_ON, args))
+		  CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_ON failed.\n");
+
+		ioctl(g_hdisp, DISP_CMD_VIDEO_START, args);
 	}
-	layer_info.fb.seq = DISP_SEQ_UVUV;
-	layer_info.fb.br_swap = 0;
-	layer_info.fb.addr[0] = luma_buffer + DRAM_OFFSET;
-	layer_info.fb.addr[1] = chroma_buffer + DRAM_OFFSET;
 
-	layer_info.fb.cs_mode = DISP_BT601;
-	layer_info.fb.size.width = width;
-	layer_info.fb.size.height = height;
-	layer_info.src_win.x = 0;
-	layer_info.src_win.y = 0;
-	layer_info.src_win.width = width;
-	layer_info.src_win.height = height;
-	layer_info.scn_win.x = out_x;
-	layer_info.scn_win.y = out_y;
-	layer_info.scn_win.width = out_width;
-	layer_info.scn_win.height = out_height;
+	if(UpdateCmd & 0x02){
 
-	args[0] = 0;
-	args[1] = g_hlayer;
-	args[2] = (unsigned long)(&layer_info);
-	args[3] = 0;
-	ioctl(g_hdisp, DISP_CMD_LAYER_SET_PARA, args);
-	ioctl(g_hdisp, DISP_CMD_LAYER_BOTTOM, args);
-	ioctl(g_hdisp, DISP_CMD_LAYER_OPEN, args);
+		//turn on global alpha
+		args[0] = 0;
+		args[1] = g_hlayer;
+		args[2] = 0;
+		args[3] = 0;
+		//if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_ON, args))
+		  //CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_ON failed.\n");
 
-    //turn off colorkey (system layer)
-    args[0] = 0;
-    args[1] = g_syslayer;
-    args[2] = 0;
-    args[3] = 0;
-    if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_OFF, args))
-      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_OFF failed.\n");
-    //if ((g_height > 720) && (getenv("A10AB") == NULL))
-    //{
-      //no tearing at the cost off alpha blending...
-
-      //set colorkey
-      colorkey.ck_min.alpha = 0;
-      colorkey.ck_min.red   = 1;
-      colorkey.ck_min.green = 2;
-      colorkey.ck_min.blue  = 3;
-      colorkey.ck_max = colorkey.ck_min;
-      colorkey.ck_max.alpha = 255;
-	  //colorkey.ck_max.red   = 10;
-      //colorkey.ck_max.green = 10;
-      //colorkey.ck_max.blue  = 10;
-      colorkey.red_match_rule   = 2;
-      colorkey.green_match_rule = 2;
-      colorkey.blue_match_rule  = 2;
-
-      args[0] = 0;
-      args[1] = (unsigned long)&colorkey;
-      args[2] = 0;
-      args[3] = 0;
-      if (ioctl(g_hdisp, DISP_CMD_SET_COLORKEY, args))
-        CLog::Log(LOGERROR, "A10: DISP_CMD_SET_COLORKEY failed.\n");
-
-      //turn on colorkey
-      args[0] = 0;
-      args[1] = g_hlayer;
-      args[2] = 0;
-      args[3] = 0;
-      if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_ON, args))
-        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_ON failed.\n");
-
-      //turn on global alpha (system layer)
-      args[0] = g_screenid;
-      args[1] = g_syslayer;
-      args[2] = 0;
-      args[3] = 0;
-      if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_ON, args))
-        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_ON failed.\n");
- /*   }
-    else
-    {
-      //turn off global alpha (system layer)
-      args[0] = g_screenid;
-      args[1] = g_syslayer;
-      args[2] = 0;
-      args[3] = 0;
-      if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_OFF, args))
-        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_OFF failed.\n");
-    }*/
-
- /*
-    //enable vpp
-    args[0] = 0;
-    args[1] = g_hlayer;
-    args[2] = 0;
-    args[3] = 0;
-    if (ioctl(g_hdisp, DISP_CMD_LAYER_VPP_ON, args))
-      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_VPP_ON failed.\n");
- 
-    //enable enhance
-    args[0] = 0;
-    args[1] = g_hlayer;
-    args[2] = 0;
-    args[3] = 0;
-    if (ioctl(g_hdisp, DISP_CMD_LAYER_ENHANCE_ON, args))
-      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ENHANCE_ON failed.\n");
-*/	
-
-	ioctl(g_hdisp, DISP_CMD_VIDEO_START, args);
-	//g_bParaSeted = true;
-   }
-/*
-	args[0] = 0;
-    args[1] = g_hlayer;
-    args[2] = (unsigned long)&frmbuf;
-    args[3] = 0;
-    if (ioctl(g_hdisp, DISP_CMD_VIDEO_SET_FB, args))
-      CLog::Log(LOGERROR, "A10: DISP_CMD_VIDEO_SET_FB failed.\n");
-*/
+		//set alpha
+		args[0] = 0;
+		args[1] = g_hlayer;
+		args[2] = alpha;
+		args[3] = 0;
+		if (ioctl(g_hdisp, DISP_CMD_LAYER_SET_ALPHA_VALUE, args))
+		  CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_SET_ALPHA_VALUE failed.\n");
+	}
 /***********************************************************/
 		//look the para
 		__disp_layer_info_t layer_debug;

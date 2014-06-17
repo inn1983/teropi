@@ -1,0 +1,942 @@
+diff --git a/xbmc/Application.cpp b/xbmc/Application.cpp
+index 1d1c08e..6831637 100755
+--- a/xbmc/Application.cpp
++++ b/xbmc/Application.cpp
+@@ -2287,7 +2287,7 @@ void CApplication::Render()
+       CSingleLock lock(m_frameMutex);
+ 
+       TightConditionVariable<int&> cv(m_frameCond,m_frameCount);
+-      cv.wait(lock,100);
++      cv.wait(lock,5);
+ 
+       m_bPresentFrame = m_frameCount > 0;
+       decrement = m_bPresentFrame;
+diff --git a/xbmc/GUIInfoManager.cpp b/xbmc/GUIInfoManager.cpp
+index 4b49a9b..a1ce6b5 100755
+--- a/xbmc/GUIInfoManager.cpp
++++ b/xbmc/GUIInfoManager.cpp
+@@ -276,7 +276,8 @@ const infomap system_labels[] =  {{ "hasnetwork",       SYSTEM_ETHERNET_LINK_ACT
+                                   { "alarmpos",         SYSTEM_ALARM_POS },
+                                   { "isinhibit",        SYSTEM_ISINHIBIT },
+                                   { "hasshutdown",      SYSTEM_HAS_SHUTDOWN },
+-                                  { "haspvr",           SYSTEM_HAS_PVR }};
++                                  { "haspvr",           SYSTEM_HAS_PVR },
++								  { "twitter",          SYSTEM_TWITTER }};
+ 
+ const infomap system_param[] =   {{ "hasalarm",         SYSTEM_HAS_ALARM },
+                                   { "hascoreid",        SYSTEM_HAS_CORE_ID },
+@@ -1718,6 +1719,11 @@ CStdString CGUIInfoManager::GetLabel(int info, int contextWindow, CStdString *fa
+         strLabel = friendlyName;
+     }
+     break;
++  case SYSTEM_TWITTER:
++ 	{
++		strLabel = m_TwitterText;
++    }
++  	break;
+   case LCD_PLAY_ICON:
+     {
+       int iPlaySpeed = g_application.GetPlaySpeed();
+@@ -5411,3 +5417,10 @@ bool CGUIInfoManager::GetEpgInfoTag(CEpgInfoTag& tag) const
+   }
+   return false;
+ }
++
++
++void CGUIInfoManager::SetTwitterInfo(CStdString str)
++{
++	m_TwitterText = str;
++}
++
+diff --git a/xbmc/GUIInfoManager.h b/xbmc/GUIInfoManager.h
+index 5424515..771871e 100755
+--- a/xbmc/GUIInfoManager.h
++++ b/xbmc/GUIInfoManager.h
+@@ -184,6 +184,8 @@ namespace INFO
+ #define SYSTEM_ISINHIBIT            184
+ #define SYSTEM_HAS_SHUTDOWN         185
+ #define SYSTEM_HAS_PVR              186
++#define SYSTEM_TWITTER				187	//TWITTER info
++
+ 
+ #define NETWORK_IP_ADDRESS          190
+ #define NETWORK_MAC_ADDRESS         191
+@@ -815,6 +817,8 @@ public:
+   /// \brief iterates through boolean conditions and compares their stored values to current values. Returns true if any condition changed value.
+   bool ConditionsChangedValues(const std::map<int, bool>& map);
+   int m_debugFpsFlg;	  //added by inn
++
++  void SetTwitterInfo(CStdString str);
+ protected:
+   friend class INFO::InfoSingle;
+   bool GetBool(int condition, int contextWindow = 0, const CGUIListItem *item=NULL);
+@@ -923,6 +927,8 @@ protected:
+   int m_libraryHasMusicVideos;
+   int m_libraryHasMovieSets;
+ 
++  CStdString m_TwitterText;
++
+   CCriticalSection m_critInfo;
+ };
+ 
+diff --git a/xbmc/GUIUserMessages.h b/xbmc/GUIUserMessages.h
+index d34816e..984d4fc 100755
+--- a/xbmc/GUIUserMessages.h
++++ b/xbmc/GUIUserMessages.h
+@@ -129,3 +129,7 @@
+ 
+ // Sent to the AddonSetting dialogs from addons if they updated a setting
+ #define GUI_MSG_SETTING_UPDATED       GUI_MSG_USER + 35
++
++// Sent to the CGUIWindowSlideShow to set the size of imge
++#define GUI_MSG_SETTING_SLIDSHOWSIZE       GUI_MSG_USER + 36
++
+diff --git a/xbmc/cores/VideoRenderers/BaseRenderer.cpp b/xbmc/cores/VideoRenderers/BaseRenderer.cpp
+index a54ff31..6088a1d 100755
+--- a/xbmc/cores/VideoRenderers/BaseRenderer.cpp
++++ b/xbmc/cores/VideoRenderers/BaseRenderer.cpp
+@@ -54,6 +54,9 @@ CBaseRenderer::CBaseRenderer()
+ 
+   m_RenderUpdateCallBackFn = NULL;
+   m_RenderUpdateCallBackCtx = NULL;
++
++  m_zoomHightForce = 0;
++  m_zoomWidthForce = 0;
+ }
+ 
+ CBaseRenderer::~CBaseRenderer()
+@@ -571,6 +574,36 @@ void CBaseRenderer::ManageDisplay()
+   m_sourceRect.y2 = (float)m_sourceHeight - g_settings.m_currentVideoSettings.m_CropBottom;
+ 
+   CalcNormalDisplayRect(view.x1, view.y1, view.Width(), view.Height(), GetAspectRatio() * g_settings.m_fPixelRatio, g_settings.m_fZoomAmount, g_settings.m_fVerticalShift);
++
++  //set the size from build-in.
++  if (m_zoomHightForce)
++  {
++  	m_destRect.x1 = 0;
++	m_destRect.x2 = m_zoomWidthForce;
++	m_destRect.y1 = 0;
++	m_destRect.y2 = m_zoomHightForce;
++  }
++}
++
++void CBaseRenderer::SetSizeManual(CStdString setsize)
++{
++	if (setsize.Equals("size0"))
++	{
++		m_zoomHightForce = 1080;
++		m_zoomWidthForce = 1920;
++	}
++	else if (setsize.Equals("size1"))
++	{
++		m_zoomHightForce = 844;
++		m_zoomWidthForce = 1500;
++	}
++	else if (setsize.Equals("size2"))
++	{
++		m_zoomHightForce = 720;
++		m_zoomWidthForce = 1280;
++	}
++
++
+ }
+ 
+ void CBaseRenderer::SetViewMode(int viewMode)
+diff --git a/xbmc/cores/VideoRenderers/BaseRenderer.h b/xbmc/cores/VideoRenderers/BaseRenderer.h
+index 81d21d8..f7db289 100755
+--- a/xbmc/cores/VideoRenderers/BaseRenderer.h
++++ b/xbmc/cores/VideoRenderers/BaseRenderer.h
+@@ -91,6 +91,7 @@ public:
+   std::vector<ERenderFormat> SupportedFormats()  { return std::vector<ERenderFormat>(); }
+ 
+   virtual void RegisterRenderUpdateCallBack(const void *ctx, RenderUpdateCallBackFn fn);
++  void SetSizeManual(CStdString setsize);
+ 
+ protected:
+   void       ChooseBestResolution(float fps);
+@@ -129,6 +130,9 @@ protected:
+   // rendering flags
+   unsigned m_iFlags;
+ 
++  int m_zoomHightForce;
++  int m_zoomWidthForce;
++
+   const void* m_RenderUpdateCallBackCtx;
+   RenderUpdateCallBackFn m_RenderUpdateCallBackFn;
+ };
+diff --git a/xbmc/cores/VideoRenderers/LinuxRendererA10.cpp b/xbmc/cores/VideoRenderers/LinuxRendererA10.cpp
+index f382eb9..5d432ac 100755
+--- a/xbmc/cores/VideoRenderers/LinuxRendererA10.cpp
++++ b/xbmc/cores/VideoRenderers/LinuxRendererA10.cpp
+@@ -420,7 +420,7 @@ void CLinuxRendererA10::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
+   ManageTextures();
+ 
+   g_graphicsContext.BeginPaint();
+-
++/*		//removed by inn. let the fps is not same to the video.
+   if( !m_eventTexturesDone[index]->WaitMSec(500))
+   {
+     CLog::Log(LOGWARNING, "%s - Timeout waiting for texture %d", __FUNCTION__, index);
+@@ -432,8 +432,8 @@ void CLinuxRendererA10::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
+       index = m_iYV12RenderBuffer;
+     }
+   }
+-  else
+-    m_iLastRenderBuffer = index;
++  else	*/
++  m_iLastRenderBuffer = index;
+ 
+   if (clear)
+   {
+@@ -1243,7 +1243,7 @@ bool CLinuxRendererA10::CreateYV12Texture(int index)
+ //********************************************************************************************************
+ void CLinuxRendererA10::UploadBYPASSTexture(int index)
+ {
+-  m_eventTexturesDone[index]->Set();
++  //m_eventTexturesDone[index]->Set();		//by inn. let the fps is not same to the video.
+ }
+ 
+ void CLinuxRendererA10::DeleteBYPASSTexture(int index)
+@@ -2340,7 +2340,7 @@ int A10GetLayer()
+ 
+ int A10disp_set_para(const uint32_t luma_buffer, const uint32_t chroma_buffer,
+ 			const int color_format, const int width, const int height,
+-			const int out_x, const int out_y, const int out_width, const int out_height, bool bUpdate)
++			const int out_x, const int out_y, const int out_width, const int out_height, const uint16_t alpha, uint32_t UpdateCmd)
+ {
+ 	uint32_t args[4];
+ 	__disp_layer_info_t layer_info;
+@@ -2352,138 +2352,128 @@ int A10disp_set_para(const uint32_t luma_buffer, const uint32_t chroma_buffer,
+ 
+ 	frmbuf.addr[0]         = luma_buffer + DRAM_OFFSET;
+   	frmbuf.addr[1]         = chroma_buffer + DRAM_OFFSET;
++	layer_info.alpha_val     = 0xff;
+ 	
+-    if (bUpdate)
+-	{
+-	memset(&layer_info, 0, sizeof(layer_info));
+-	layer_info.pipe = 1;
+-	layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
+-	layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
+-	switch (color_format)
++    if (UpdateCmd & 0x01)
+ 	{
+-	case COLOR_YUV420:
+-		layer_info.fb.format = DISP_FORMAT_YUV420;
+-		break;
+-	case COLOR_YUV422:
+-		layer_info.fb.format = DISP_FORMAT_YUV422;
+-		break;
+-	default:
+-		return 0;
+-		break;
+-	}
+-	layer_info.fb.seq = DISP_SEQ_UVUV;
+-	layer_info.fb.br_swap = 0;
+-	layer_info.fb.addr[0] = luma_buffer + DRAM_OFFSET;
+-	layer_info.fb.addr[1] = chroma_buffer + DRAM_OFFSET;
+-
+-	layer_info.fb.cs_mode = DISP_BT601;
+-	layer_info.fb.size.width = width;
+-	layer_info.fb.size.height = height;
+-	layer_info.src_win.x = 0;
+-	layer_info.src_win.y = 0;
+-	layer_info.src_win.width = width;
+-	layer_info.src_win.height = height;
+-	layer_info.scn_win.x = out_x;
+-	layer_info.scn_win.y = out_y;
+-	layer_info.scn_win.width = out_width;
+-	layer_info.scn_win.height = out_height;
+-
+-	args[0] = 0;
+-	args[1] = g_hlayer;
+-	args[2] = (unsigned long)(&layer_info);
+-	args[3] = 0;
+-	ioctl(g_hdisp, DISP_CMD_LAYER_SET_PARA, args);
+-	ioctl(g_hdisp, DISP_CMD_LAYER_BOTTOM, args);
+-	ioctl(g_hdisp, DISP_CMD_LAYER_OPEN, args);
+-
+-    //turn off colorkey (system layer)
+-    args[0] = 0;
+-    args[1] = g_syslayer;
+-    args[2] = 0;
+-    args[3] = 0;
+-    if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_OFF, args))
+-      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_OFF failed.\n");
+-    //if ((g_height > 720) && (getenv("A10AB") == NULL))
+-    //{
+-      //no tearing at the cost off alpha blending...
++		memset(&layer_info, 0, sizeof(layer_info));
++		layer_info.pipe = 1;
++		layer_info.mode = DISP_LAYER_WORK_MODE_SCALER;
++		layer_info.fb.mode = DISP_MOD_MB_UV_COMBINED;
++
++		//use alpha blend
++	    layer_info.alpha_en      = 1;
++	    layer_info.alpha_val     = alpha;
++	    layer_info.ck_enable     = 0;
++	    layer_info.b_trd_out     = 0;
++	    layer_info.out_trd_mode  = (__disp_3d_out_mode_t)0;
++		
++		switch (color_format)
++		{
++		case COLOR_YUV420:
++			layer_info.fb.format = DISP_FORMAT_YUV420;
++			break;
++		case COLOR_YUV422:
++			layer_info.fb.format = DISP_FORMAT_YUV422;
++			break;
++		default:
++			return 0;
++			break;
++		}
++		layer_info.fb.seq = DISP_SEQ_UVUV;
++		layer_info.fb.br_swap = 0;
++		layer_info.fb.addr[0] = luma_buffer + DRAM_OFFSET;
++		layer_info.fb.addr[1] = chroma_buffer + DRAM_OFFSET;
++
++		layer_info.fb.cs_mode = DISP_BT601;
++		layer_info.fb.size.width = width;
++		layer_info.fb.size.height = height;
++		layer_info.src_win.x = 0;
++		layer_info.src_win.y = 0;
++		layer_info.src_win.width = width;
++		layer_info.src_win.height = height;
++		layer_info.scn_win.x = out_x;
++		layer_info.scn_win.y = out_y;
++		layer_info.scn_win.width = out_width;
++		layer_info.scn_win.height = out_height;
++
++		args[0] = 0;
++		args[1] = g_hlayer;
++		args[2] = (unsigned long)(&layer_info);
++		args[3] = 0;
++		ioctl(g_hdisp, DISP_CMD_LAYER_SET_PARA, args);
++		ioctl(g_hdisp, DISP_CMD_LAYER_BOTTOM, args);
++		ioctl(g_hdisp, DISP_CMD_LAYER_OPEN, args);
++
++	    //turn off colorkey (system layer)
++	    args[0] = 0;
++	    args[1] = g_syslayer;
++	    args[2] = 0;
++	    args[3] = 0;
++	    if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_OFF, args))
++	      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_OFF failed.\n");
++	    //if ((g_height > 720) && (getenv("A10AB") == NULL))
++	    //{
++	      //no tearing at the cost off alpha blending...
++
++	      //set colorkey
++		colorkey.ck_min.alpha = 0;
++		colorkey.ck_min.red   = 1;
++		colorkey.ck_min.green = 2;
++		colorkey.ck_min.blue  = 3;
++		colorkey.ck_max = colorkey.ck_min;
++		colorkey.ck_max.alpha = 255;
++		//colorkey.ck_max.red   = 10;
++		//colorkey.ck_max.green = 10;
++		//colorkey.ck_max.blue  = 10;
++		colorkey.red_match_rule   = 2;
++		colorkey.green_match_rule = 2;
++		colorkey.blue_match_rule  = 2;
++
++		args[0] = 0;
++		args[1] = (unsigned long)&colorkey;
++		args[2] = 0;
++		args[3] = 0;
++		if (ioctl(g_hdisp, DISP_CMD_SET_COLORKEY, args))
++		  CLog::Log(LOGERROR, "A10: DISP_CMD_SET_COLORKEY failed.\n");
+ 
+-      //set colorkey
+-      colorkey.ck_min.alpha = 0;
+-      colorkey.ck_min.red   = 1;
+-      colorkey.ck_min.green = 2;
+-      colorkey.ck_min.blue  = 3;
+-      colorkey.ck_max = colorkey.ck_min;
+-      colorkey.ck_max.alpha = 255;
+-	  //colorkey.ck_max.red   = 10;
+-      //colorkey.ck_max.green = 10;
+-      //colorkey.ck_max.blue  = 10;
+-      colorkey.red_match_rule   = 2;
+-      colorkey.green_match_rule = 2;
+-      colorkey.blue_match_rule  = 2;
++		//turn on colorkey
++		args[0] = 0;
++		args[1] = g_hlayer;
++		args[2] = 0;
++		args[3] = 0;
++		if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_ON, args))
++		  CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_ON failed.\n");
+ 
+-      args[0] = 0;
+-      args[1] = (unsigned long)&colorkey;
+-      args[2] = 0;
+-      args[3] = 0;
+-      if (ioctl(g_hdisp, DISP_CMD_SET_COLORKEY, args))
+-        CLog::Log(LOGERROR, "A10: DISP_CMD_SET_COLORKEY failed.\n");
++		//turn on global alpha (system layer)
++		args[0] = g_screenid;
++		args[1] = g_syslayer;
++		args[2] = 0;
++		args[3] = 0;
++		if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_ON, args))
++		  CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_ON failed.\n");
+ 
+-      //turn on colorkey
+-      args[0] = 0;
+-      args[1] = g_hlayer;
+-      args[2] = 0;
+-      args[3] = 0;
+-      if (ioctl(g_hdisp, DISP_CMD_LAYER_CK_ON, args))
+-        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_CK_ON failed.\n");
++		ioctl(g_hdisp, DISP_CMD_VIDEO_START, args);
++	}
+ 
+-      //turn on global alpha (system layer)
+-      args[0] = g_screenid;
+-      args[1] = g_syslayer;
+-      args[2] = 0;
+-      args[3] = 0;
+-      if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_ON, args))
+-        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_ON failed.\n");
+- /*   }
+-    else
+-    {
+-      //turn off global alpha (system layer)
+-      args[0] = g_screenid;
+-      args[1] = g_syslayer;
+-      args[2] = 0;
+-      args[3] = 0;
+-      if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_OFF, args))
+-        CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_OFF failed.\n");
+-    }*/
++	if(UpdateCmd & 0x02){
+ 
+- /*
+-    //enable vpp
+-    args[0] = 0;
+-    args[1] = g_hlayer;
+-    args[2] = 0;
+-    args[3] = 0;
+-    if (ioctl(g_hdisp, DISP_CMD_LAYER_VPP_ON, args))
+-      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_VPP_ON failed.\n");
+- 
+-    //enable enhance
+-    args[0] = 0;
+-    args[1] = g_hlayer;
+-    args[2] = 0;
+-    args[3] = 0;
+-    if (ioctl(g_hdisp, DISP_CMD_LAYER_ENHANCE_ON, args))
+-      CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ENHANCE_ON failed.\n");
+-*/	
++		//turn on global alpha
++		args[0] = 0;
++		args[1] = g_hlayer;
++		args[2] = 0;
++		args[3] = 0;
++		//if (ioctl(g_hdisp, DISP_CMD_LAYER_ALPHA_ON, args))
++		  //CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_ALPHA_ON failed.\n");
+ 
+-	ioctl(g_hdisp, DISP_CMD_VIDEO_START, args);
+-	//g_bParaSeted = true;
+-   }
+-/*
+-	args[0] = 0;
+-    args[1] = g_hlayer;
+-    args[2] = (unsigned long)&frmbuf;
+-    args[3] = 0;
+-    if (ioctl(g_hdisp, DISP_CMD_VIDEO_SET_FB, args))
+-      CLog::Log(LOGERROR, "A10: DISP_CMD_VIDEO_SET_FB failed.\n");
+-*/
++		//set alpha
++		args[0] = 0;
++		args[1] = g_hlayer;
++		args[2] = alpha;
++		args[3] = 0;
++		if (ioctl(g_hdisp, DISP_CMD_LAYER_SET_ALPHA_VALUE, args))
++		  CLog::Log(LOGERROR, "A10: DISP_CMD_LAYER_SET_ALPHA_VALUE failed.\n");
++	}
+ /***********************************************************/
+ 		//look the para
+ 		__disp_layer_info_t layer_debug;
+diff --git a/xbmc/cores/VideoRenderers/LinuxRendererA10.h b/xbmc/cores/VideoRenderers/LinuxRendererA10.h
+index 4c65470..afc22d0 100755
+--- a/xbmc/cores/VideoRenderers/LinuxRendererA10.h
++++ b/xbmc/cores/VideoRenderers/LinuxRendererA10.h
+@@ -307,7 +307,7 @@ int A10GetLayer();
+ 
+ int A10disp_set_para(const uint32_t luma_buffer, const uint32_t chroma_buffer,
+ 			const int color_format, const int width, const int height,
+-			const int out_x, const int out_y, const int out_width, const int out_height, bool bUpdate);
++			const int out_x, const int out_y, const int out_width, const int out_height, const uint16_t alpha, uint32_t UpdateCmd);
+ 
+ extern CRect  g_srcRect;
+ extern CRect g_dstRect;
+diff --git a/xbmc/cores/VideoRenderers/RenderManager.cpp b/xbmc/cores/VideoRenderers/RenderManager.cpp
+index 95a735f..6503e1b 100755
+--- a/xbmc/cores/VideoRenderers/RenderManager.cpp
++++ b/xbmc/cores/VideoRenderers/RenderManager.cpp
+@@ -107,6 +107,7 @@ CXBMCRenderManager::CXBMCRenderManager()
+   m_bReconfigured = false;
+   m_hasCaptures = false;
+   m_displayLatency = 0.0f;
++  m_zoomSize = "";
+ }
+ 
+ CXBMCRenderManager::~CXBMCRenderManager()
+@@ -316,6 +317,11 @@ void CXBMCRenderManager::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
+   m_presentevent.Set();
+ }
+ 
++void CXBMCRenderManager::SetSizeManual(CStdString setsize)
++{
++	m_zoomSize = setsize;
++}
++
+ unsigned int CXBMCRenderManager::PreInit()
+ {
+   CRetakeLock<CExclusiveLock> lock(m_sharedSection);
+@@ -344,6 +350,8 @@ unsigned int CXBMCRenderManager::PreInit()
+ #endif
+   }
+ 
++  m_pRenderer->SetSizeManual(m_zoomSize);
++
+   UpdateDisplayLatency();
+ 
+   return m_pRenderer->PreInit();
+@@ -542,13 +550,14 @@ void CXBMCRenderManager::SetViewMode(int iViewMode)
+     m_pRenderer->SetViewMode(iViewMode);
+ }
+ 
++int g_debugFpsWait = 0;
+ void CXBMCRenderManager::FlipPage(volatile bool& bStop, double timestamp /* = 0LL*/, int source /*= -1*/, EFIELDSYNC sync /*= FS_NONE*/)
+ {
+   if(timestamp - GetPresentTime() > MAXPRESENTDELAY)
+     timestamp =  GetPresentTime() + MAXPRESENTDELAY;
+ 
+   /* can't flip, untill timestamp */
+-  if(!g_graphicsContext.IsFullScreenVideo())
++  if(!g_graphicsContext.IsFullScreenVideo() || (g_debugFpsWait==0))
+     WaitPresentTime(timestamp);
+ 
+   /* make sure any queued frame was fully presented */
+@@ -677,6 +686,7 @@ void CXBMCRenderManager::Render(bool clear, DWORD flags, DWORD alpha)
+   m_overlays.Render();
+ }
+ 
++//int g_debugFpsWait = 0;
+ void CXBMCRenderManager::Present()
+ {
+   { CRetakeLock<CExclusiveLock> lock(m_sharedSection);
+@@ -697,7 +707,7 @@ void CXBMCRenderManager::Present()
+   /* wait for this present to be valid */
+   if(g_graphicsContext.IsFullScreenVideo())
+     WaitPresentTime(m_presenttime);
+-
++ 
+   m_presentevent.Set();
+ }
+ 
+diff --git a/xbmc/cores/VideoRenderers/RenderManager.h b/xbmc/cores/VideoRenderers/RenderManager.h
+index d39779e..56e5c7b 100755
+--- a/xbmc/cores/VideoRenderers/RenderManager.h
++++ b/xbmc/cores/VideoRenderers/RenderManager.h
+@@ -137,6 +137,8 @@ public:
+ 
+   void RegisterRenderUpdateCallBack(const void *ctx, RenderUpdateCallBackFn fn);
+ 
++  void SetSizeManual(CStdString setsize);
++
+ protected:
+   void Render(bool clear, DWORD flags, DWORD alpha);
+ 
+@@ -186,6 +188,8 @@ protected:
+   CEvent     m_presentevent;
+   CEvent     m_flushEvent;
+ 
++  CStdString m_zoomSize;
++
+ 
+   OVERLAY::CRenderer m_overlays;
+ 
+diff --git a/xbmc/cores/dvdplayer/DVDPlayerVideo.cpp b/xbmc/cores/dvdplayer/DVDPlayerVideo.cpp
+index 92702c6..e49b14e 100755
+--- a/xbmc/cores/dvdplayer/DVDPlayerVideo.cpp
++++ b/xbmc/cores/dvdplayer/DVDPlayerVideo.cpp
+@@ -312,7 +312,7 @@ void CDVDPlayerVideo::OnStartup()
+ 
+   g_dvdPerformanceCounter.EnableVideoDecodePerformance(this);
+ }
+-
++int g_fpsdebug = 0;
+ void CDVDPlayerVideo::Process()
+ {
+   CLog::Log(LOGNOTICE, "running thread: video_thread");
+@@ -340,7 +340,7 @@ void CDVDPlayerVideo::Process()
+ 
+     CDVDMsg* pMsg;
+     MsgQueueReturnCode ret = m_messageQueue.Get(&pMsg, iQueueTimeOut, iPriority);
+-
++	while (g_fpsdebug){Sleep(100);}	//debug
+     if (MSGQ_IS_ERROR(ret) || ret == MSGQ_ABORT)
+     {
+       CLog::Log(LOGERROR, "Got MSGQ_ABORT or MSGO_IS_ERROR return true");
+diff --git a/xbmc/guilib/GUIFont.h b/xbmc/guilib/GUIFont.h
+index c87da62..f88edc8 100755
+--- a/xbmc/guilib/GUIFont.h
++++ b/xbmc/guilib/GUIFont.h
+@@ -92,7 +92,7 @@ public:
+   float initialPos;
+   CStdStringW suffix;
+ 
+-  static const int defaultSpeed = 60;
++  static const int defaultSpeed = 33;
+ private:
+   float m_averageFrameTime;
+   uint32_t m_lastFrameTime;
+diff --git a/xbmc/guilib/GUIFontTTF.cpp b/xbmc/guilib/GUIFontTTF.cpp
+index 3b87ac7..1b4294f 100755
+--- a/xbmc/guilib/GUIFontTTF.cpp
++++ b/xbmc/guilib/GUIFontTTF.cpp
+@@ -417,7 +417,7 @@ void CGUIFontTTFBase::DrawTextInternal(float x, float y, const vecColors &colors
+     else
+       cursorX += ch->advance;
+   }
+-  m_ChHasRended = true;	//added by inn
++  //m_ChHasRended = true;	//added by inn
+   
+   End();
+ }
+diff --git a/xbmc/guilib/GUIFontTTFGL.cpp b/xbmc/guilib/GUIFontTTFGL.cpp
+index d487023..fb365ad 100755
+--- a/xbmc/guilib/GUIFontTTFGL.cpp
++++ b/xbmc/guilib/GUIFontTTFGL.cpp
+@@ -43,7 +43,7 @@ using namespace std;
+ 
+ #if defined(HAS_GL) || defined(HAS_GLES)
+ 
+-unsigned char* g_debug_pixels = NULL;
++
+ 
+ CGUIFontTTFGL::CGUIFontTTFGL(const CStdString& strFileName)
+ : CGUIFontTTFBase(strFileName)
+@@ -168,10 +168,10 @@ void CGUIFontTTFGL::End()
+   glEnableVertexAttribArray(colLoc);
+   glEnableVertexAttribArray(tex0Loc);
+ 
+-  if (m_ChHasRended) {		//added by inn
++  //if (m_ChHasRended) {		//added by inn
+ 	glDrawArrays(GL_TRIANGLES, 0, vecVertices.size());
+ 	//m_ChHasRended = false;
+-  }
++  //}
+ 
+   glDisableVertexAttribArray(posLoc);
+   glDisableVertexAttribArray(colLoc);
+@@ -203,7 +203,6 @@ void CGUIFontTTFGL::TelopBegin()
+       // Set the texture image -- THIS WORKS, so the pixels must be wrong.
+       glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, m_texture->GetWidth(), m_texture->GetHeight(), 0,
+                    GL_ALPHA, GL_UNSIGNED_BYTE, m_texture->GetPixels());
+-	  g_debug_pixels = m_texture->GetPixels();	//added by inn
+ 
+       VerifyGLState();
+       m_bTextureLoaded = true;
+diff --git a/xbmc/guilib/GUILabel.cpp b/xbmc/guilib/GUILabel.cpp
+index d7b6bf5..403b304 100755
+--- a/xbmc/guilib/GUILabel.cpp
++++ b/xbmc/guilib/GUILabel.cpp
+@@ -28,7 +28,7 @@ CGUILabel::CGUILabel(float posX, float posY, float width, float height, const CL
+     , m_scrolling(overflow == OVER_FLOW_SCROLL)
+     , m_overflowType(overflow)
+     , m_selected(false)
+-    , m_scrollInfo(50, 0, labelInfo.scrollSpeed, labelInfo.scrollSuffix)
++    , m_scrollInfo(0, 0, labelInfo.scrollSpeed, labelInfo.scrollSuffix)
+     , m_renderRect()
+     , m_maxRect(posX, posY, posX + width, posY + height)
+     , m_invalid(true)
+diff --git a/xbmc/guilib/GUITextLayout.cpp b/xbmc/guilib/GUITextLayout.cpp
+index f796bef..22c755c 100755
+--- a/xbmc/guilib/GUITextLayout.cpp
++++ b/xbmc/guilib/GUITextLayout.cpp
+@@ -104,7 +104,7 @@ void CGUITextLayout::RenderScrolling(float x, float y, float angle, color_t colo
+ {
+   if (!m_font)
+     return;
+-
++/*
+   float scrollAmount = fabs(scrollInfo.GetPixelsPerFrame() * g_graphicsContext.GetGUIScaleX());	//added by inn
+   m_font->SetScrollAmount(scrollAmount);	//added by inn
+ 
+@@ -113,8 +113,8 @@ void CGUITextLayout::RenderScrolling(float x, float y, float angle, color_t colo
+ 	m_font->TelopEnd();
+ 	return;
+   }
+-
+   m_bTelop = true;	//added by inn
++*/
+   // set the main text color
+   if (m_colors.size())
+     m_colors[0] = color;
+@@ -567,13 +567,13 @@ void CGUITextLayout::CalcTextExtent()
+   m_textWidth = 0;
+   m_textHeight = 0;
+   if (!m_font) return;
+-
++/*
+   if (m_font->GetHasRenderF() && m_bTelop){	//added by inn
+ 	//m_font->Begin();
+ 	//m_font->End();
+ 	return;
+   }
+-
++*/
+   for (vector<CGUIString>::iterator i = m_lines.begin(); i != m_lines.end(); i++)
+   {
+     const CGUIString &string = *i;
+diff --git a/xbmc/guilib/GUIWindow.cpp b/xbmc/guilib/GUIWindow.cpp
+index f000864..ad122e7 100755
+--- a/xbmc/guilib/GUIWindow.cpp
++++ b/xbmc/guilib/GUIWindow.cpp
+@@ -90,6 +90,13 @@ bool CGUIWindow::Load(const CStdString& strFileName, bool bContainsPath)
+   start = CurrentHostCounter();
+ #endif
+   const char* strLoadType;
++  CStdString strxml = strFileName.Right(19);
++  /*
++  if (strxml.Left(6).CompareNoCase("custom") == 0)
++  {
++  	m_loadType = KEEP_IN_MEMORY;	//let the Custom_OverlayX.xml keep.
++  }
++  */
+   switch (m_loadType)
+   {
+   case LOAD_ON_GUI_INIT:
+diff --git a/xbmc/interfaces/Builtins.cpp b/xbmc/interfaces/Builtins.cpp
+index fae2524..813036e 100755
+--- a/xbmc/interfaces/Builtins.cpp
++++ b/xbmc/interfaces/Builtins.cpp
+@@ -90,6 +90,11 @@
+ #include <vector>
+ #include "xbmc/settings/AdvancedSettings.h"
+ 
++#include "cores/VideoRenderers/RenderManager.h"
++#include "cores/VideoRenderers/LinuxRendererA10.h"
++
++#include "GUIInfoManager.h"
++
+ using namespace std;
+ using namespace XFILE;
+ using namespace ADDON;
+@@ -216,6 +221,8 @@ const BUILT_IN commands[] = {
+   { "ToggleDebug",                false,  "Enables/disables debug mode" },
+   { "StartPVRManager",            false,  "(Re)Starts the PVR manager" },
+   { "StopPVRManager",             false,  "Stops the PVR manager" },
++  { "SetSizeManual",		  	  true,	  "Set the size of SlideShow and Video"},
++  {	"UpdateTwitter",		  	  true,	  "UpdateTwitter"},
+ };
+ 
+ bool CBuiltins::HasCommand(const CStdString& execString)
+@@ -1637,6 +1644,32 @@ int CBuiltins::Execute(const CStdString& execString)
+   {
+     g_application.StopPVRManager();
+   }
++  else if (execute.Equals("setsizemanual"))
++  {
++    if (!params.size())
++    {
++      CLog::Log(LOGERROR, "SetSizeManual called with empty parameter");
++      return -2;
++    }
++
++    CGUIMessage msg(GUI_MSG_SETTING_SLIDSHOWSIZE, 0, 0, 0);
++    msg.SetStringParam(params[0]);
++    CGUIWindow *pWindow = g_windowManager.GetWindow(WINDOW_SLIDESHOW);
++    if (pWindow) pWindow->OnMessage(msg);
++	
++	g_renderManager.SetSizeManual(params[0]);	//set video size.
++
++  }
++  else if (execute.Equals("updatetwitter"))
++  {
++  	if (!params.size())
++    {
++      CLog::Log(LOGERROR, "UpdateTwitter called with empty parameter");
++      return -2;
++    }
++
++	g_infoManager.SetTwitterInfo(params[0]);
++  }
+   else
+     return -1;
+   return 0;
+diff --git a/xbmc/pictures/GUIWindowSlideShow.cpp b/xbmc/pictures/GUIWindowSlideShow.cpp
+index 8647244..389f12a 100755
+--- a/xbmc/pictures/GUIWindowSlideShow.cpp
++++ b/xbmc/pictures/GUIWindowSlideShow.cpp
+@@ -171,6 +171,8 @@ CGUIWindowSlideShow::CGUIWindowSlideShow(void)
+   m_loadType = KEEP_IN_MEMORY;
+   Reset();
+   m_bAllPicLoaded = 0;
++  m_zoomHight = 1080;
++  m_zoomWidth = 1920;
+   int ret;
+   //m_hcedarv = libcedarv_init(&ret);
+   if (ret < 0)
+@@ -852,7 +854,7 @@ bool CGUIWindowSlideShow::OnAction(const CAction &action)
+   case ACTION_ANALOG_MOVE:
+     Move(action.GetAmount()*PICTURE_MOVE_AMOUNT_ANALOG, -action.GetAmount(1)*PICTURE_MOVE_AMOUNT_ANALOG);
+     break;
+-
++	
+   default:
+     return CGUIWindow::OnAction(action);
+   }
+@@ -948,6 +950,27 @@ bool CGUIWindowSlideShow::OnMessage(CGUIMessage& message)
+         }
+       }
+       break;
++	case GUI_MSG_SETTING_SLIDSHOWSIZE:
++	  {
++	  	CStdString setsize = message.GetStringParam();
++		if (setsize.Equals("size0"))
++		{
++			m_zoomHight = 1080;
++			m_zoomWidth = 1920;
++		}
++		else if (setsize.Equals("size1"))
++		{
++			m_zoomHight = 844;
++			m_zoomWidth = 1500;
++		}
++		else if (setsize.Equals("size2"))
++		{
++			m_zoomHight = 720;
++			m_zoomWidth = 1280;
++		}
++
++	  }
++	 break;
+   }
+   return CGUIWindow::OnMessage(message);
+ }
+@@ -1067,7 +1090,8 @@ void CGUIWindowSlideShow::OnLoadPic(int iPic, int iSlideNumber, CBaseTexture* pT
+     {
+       if (m_bSlideShow)
+ 	  	//modfied by inn.  Set the TRANSISTION_EFFECT.
+-        m_Image[iPic].SetTexture(iSlideNumber, pTexture, g_guiSettings.GetBool("slideshow.displayeffects") ? CSlideShowPic::EFFECT_RANDOM : CSlideShowPic::EFFECT_NONE, CSlideShowPic::TRANSISTION_NONE);
++        m_Image[iPic].SetTexture(iSlideNumber, pTexture, g_guiSettings.GetBool("slideshow.displayeffects") ? CSlideShowPic::EFFECT_RANDOM : CSlideShowPic::EFFECT_NONE, 
++        						CSlideShowPic::FADEIN_FADEOUT, m_zoomWidth, m_zoomHight);
+       else
+         m_Image[iPic].SetTexture(iSlideNumber, pTexture, CSlideShowPic::EFFECT_NO_TIMEOUT);
+       m_Image[iPic].SetOriginalSize(pTexture->GetOriginalWidth(), pTexture->GetOriginalHeight(), bFullSize);
+diff --git a/xbmc/pictures/GUIWindowSlideShow.h b/xbmc/pictures/GUIWindowSlideShow.h
+index dc88824..a2b5824 100755
+--- a/xbmc/pictures/GUIWindowSlideShow.h
++++ b/xbmc/pictures/GUIWindowSlideShow.h
+@@ -163,5 +163,7 @@ private:
+   CStdString m_strExtensions;
+   CPoint m_firstGesturePoint;
+   int m_bAllPicLoaded;	//added by inn. all of jpegs are decoded.
++  int m_zoomHight;
++  int m_zoomWidth;
+   //cedarv_decoder_t* m_hcedarv;	//for A10 DISP
+ };
+diff --git a/xbmc/pictures/SlideShowPicture.cpp b/xbmc/pictures/SlideShowPicture.cpp
+index 6cdb691..6e73e64 100755
+--- a/xbmc/pictures/SlideShowPicture.cpp
++++ b/xbmc/pictures/SlideShowPicture.cpp
+@@ -60,7 +60,7 @@ CSlideShowPic::CSlideShowPic()
+   m_bIsFinished = false;
+   m_bDrawNextImage = false;
+   m_bTransistionImmediately = false;
+-  m_bImageUpdate = false;
++  m_ImageUpdateCmd = 0x0;
+ 
+   //memset(&m_cedarpic, 0, sizeof(cedarv_picture_t));
+ }
+@@ -99,7 +99,7 @@ void CSlideShowPic::CloseNoDel()
+   m_bIsDirty = true;
+ }
+ 
+-void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect, TRANSISTION_EFFECT transEffect)
++void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect, TRANSISTION_EFFECT transEffect, int zoomWidth, int zoomHight)
+ {
+   CSingleLock lock(m_textureAccess);
+   Close();	
+@@ -208,7 +208,9 @@ void CSlideShowPic::SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY
+   m_bIsFinished = false;
+   m_bDrawNextImage = false;
+   m_bIsLoaded = true;
+-  m_bImageUpdate = true;
++  m_ImageUpdateCmd |= 0x1;	//bit1:display init
++  m_zoomHight = zoomHight;
++  m_zoomWidth = zoomWidth;
+   return ;
+ }
+ 
+@@ -403,6 +405,8 @@ void CSlideShowPic::Process(unsigned int currentTime, CDirtyRegionList &dirtyreg
+   {
+     m_alpha = alpha;
+     m_bIsDirty = true;
++	//m_bImageUpdate = true;
++	m_ImageUpdateCmd |= 0x2;	//bit2:set alpha
+   }
+   if (m_displayEffect != EFFECT_NO_TIMEOUT || m_iCounter < m_transistionStart.length || m_iCounter >= m_transistionEnd.start || (m_iCounter >= m_transistionTemp.start && m_iCounter < m_transistionTemp.start + m_transistionTemp.length))
+   {
+@@ -931,18 +935,7 @@ void CSlideShowPic::Render(float *x, float *y, CBaseTexture* pTexture, color_t c
+ void CSlideShowPic::RenderA10()
+ { 
+ 	//pthread_mutex_lock(&g_dispq_mutex);
+-	/*
+-	A10VLQueueItem item;
+-	//item.decnr = m_decnr++;
+-	item.pict = m_cedarpic;
+-	CRect sourceR, destR;
+-	sourceR = CRect(0, 0, (unsigned int)m_fWidth, (unsigned int)m_fHeight);
+-	destR = sourceR;
+-	int curnr;
+-
+-	curnr = A10VLDisplaySildeShow(m_cedarpic, 1, sourceR, destR);
+-	//A10VLDisplayQueueItem(&item, source, dest);
+-	*/
++
+ 	glEnable(GL_BLEND);
+     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+     glClearColor(1.0/255, 2.0/255, 3.0/255, 0);
+@@ -950,9 +943,8 @@ void CSlideShowPic::RenderA10()
+     glClearColor(0, 0, 0, 0);
+ 	A10disp_set_para(m_pImage->GetPixelYphys(), m_pImage->GetPixelUVphys(), 
+ 					 m_pImage->GetColor(), m_pImage->GetWidth(), m_pImage->GetHeight(),
+-					 0, 0, (unsigned int)1920, (unsigned int)1080, m_bImageUpdate);
+-					 //0, 0, (unsigned int)m_fWidth, (unsigned int)m_fHeight, m_bImageUpdate);
+-	m_bImageUpdate = false;
++					 0, 0, m_zoomWidth, m_zoomHight, (uint16_t)m_alpha, m_ImageUpdateCmd);
++	m_ImageUpdateCmd = 0x0;
+ 	
+ 	//pthread_mutex_unlock(&g_dispq_mutex);
+ 	
+diff --git a/xbmc/pictures/SlideShowPicture.h b/xbmc/pictures/SlideShowPicture.h
+index 2102143..ffbcf8b 100755
+--- a/xbmc/pictures/SlideShowPicture.h
++++ b/xbmc/pictures/SlideShowPicture.h
+@@ -44,7 +44,7 @@ public:
+   CSlideShowPic();
+   ~CSlideShowPic();
+ 
+-  void SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect = EFFECT_RANDOM, TRANSISTION_EFFECT transEffect = FADEIN_FADEOUT);
++  void SetTexture(int iSlideNumber, CBaseTexture* pTexture, DISPLAY_EFFECT dispEffect = EFFECT_RANDOM, TRANSISTION_EFFECT transEffect = FADEIN_FADEOUT, int zoomWidth=1920, int zoomHight=1080);
+   void UpdateTexture(CBaseTexture* pTexture);
+ 
+   bool IsLoaded() const { return m_bIsLoaded;};
+@@ -126,7 +126,9 @@ private:
+   bool m_bNoEffect;
+   bool m_bFullSize;
+   bool m_bTransistionImmediately;
+-  bool m_bImageUpdate;
++  uint32_t m_ImageUpdateCmd;
++  int m_zoomWidth;
++  int m_zoomHight;
+   //cedarv_picture_t m_cedarpic;
+ 
+   CCriticalSection m_textureAccess;

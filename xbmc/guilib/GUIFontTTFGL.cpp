@@ -43,7 +43,7 @@ using namespace std;
 
 #if defined(HAS_GL) || defined(HAS_GLES)
 
-unsigned char* g_debug_pixels = NULL;
+
 
 CGUIFontTTFGL::CGUIFontTTFGL(const CStdString& strFileName)
 : CGUIFontTTFBase(strFileName)
@@ -168,10 +168,10 @@ void CGUIFontTTFGL::End()
   glEnableVertexAttribArray(colLoc);
   glEnableVertexAttribArray(tex0Loc);
 
-  if (m_ChHasRended) {		//added by inn
+  //if (m_ChHasRended) {		//added by inn
 	glDrawArrays(GL_TRIANGLES, 0, vecVertices.size());
 	//m_ChHasRended = false;
-  }
+  //}
 
   glDisableVertexAttribArray(posLoc);
   glDisableVertexAttribArray(colLoc);
@@ -203,7 +203,6 @@ void CGUIFontTTFGL::TelopBegin()
       // Set the texture image -- THIS WORKS, so the pixels must be wrong.
       glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, m_texture->GetWidth(), m_texture->GetHeight(), 0,
                    GL_ALPHA, GL_UNSIGNED_BYTE, m_texture->GetPixels());
-	  g_debug_pixels = m_texture->GetPixels();	//added by inn
 
       VerifyGLState();
       m_bTextureLoaded = true;
